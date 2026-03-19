@@ -1,12 +1,14 @@
 🏴‍☠️ Linux Permissions CTF – Codespaces Edition  
 🎯 Objectif  
 Bienvenue dans ce mini CTF Linux !  
-Votre mission :  
-Comprendre et exploiter les permissions Linux  
+Votre mission : Comprendre et exploiter les permissions Linux  
 Identifier des erreurs de configuration  
-Récupérer des flags  
----
+Récupérer des flags 
 🧪 Setup
+1° - Lancer le projet dans Codespaces
+- Fork / clone ce repo
+- Bouton **Code** → **Create codespace on main**
+2° Lancez le batch suivant
 ```bash
 mkdir -p ctf/{public,secret,shared,bin}
 cd ctf

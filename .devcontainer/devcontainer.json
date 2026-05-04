@@ -1,5 +1,5 @@
 {
   "name": "Linux CTF",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-  "postCreateCommand": "chmod +x setup.sh"
+  "postCreateCommand": "chmod +x setup.sh check.sh && bash setup.sh"
 }

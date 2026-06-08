@@ -13,7 +13,7 @@ Votre mission : comprendre et exploiter les droits, identifier des misconfigurat
 
 - Forkez / clonez ce dépôt
 - Cliquez sur **Code** → **Create codespace on main**
-- Le script `setup.sh` s'exécute automatiquement et configure tout l'environnement
+- Le script `./setup.sh` s'exécute automatiquement et configure tout l'environnement
 
 ### 2. Vérifier l'environnement
 

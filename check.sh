@@ -19,11 +19,13 @@ indice() { echo -e "  ${BLEU}💡 Indice :${NC} $1"; }
 
 # peut <utilisateur> <lire|ecrire|entrer> <chemin>
 # Exemple : peut bob lire ctf/etape3/info.txt
+# On passe par le « test » intégré à bash : sur certaines images, le programme
+# /usr/bin/test ignore les groupes secondaires et se trompe pour bob.
 peut() {
     case "$2" in
-        lire)   sudo -u "$1" test -r "$3" ;;
-        ecrire) sudo -u "$1" test -w "$3" ;;
-        entrer) sudo -u "$1" test -x "$3" ;;
+        lire)   sudo -u "$1" bash -c 'test -r "$0"' "$3" ;;
+        ecrire) sudo -u "$1" bash -c 'test -w "$0"' "$3" ;;
+        entrer) sudo -u "$1" bash -c 'test -x "$0"' "$3" ;;
     esac
 }
 

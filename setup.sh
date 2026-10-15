@@ -6,6 +6,14 @@ cd "$(dirname "$0")"
 
 MOI=$(id -un)          # votre utilisateur (vscode dans Codespaces)
 
+# Le jeu utilise « sudo -u bob ... » : sudo ne doit pas demander de mot de passe,
+# sinon le script resterait bloqué pendant la création du Codespace.
+if ! sudo -n -u nobody true 2>/dev/null; then
+    echo "ERREUR : sudo demande un mot de passe pour agir en tant qu'un autre utilisateur."
+    echo "Dans Codespaces, recréez le Codespace (le Dockerfile du dossier .devcontainer corrige cela)."
+    exit 1
+fi
+
 echo "================================================"
 echo "   Jeu des droits Linux – Installation"
 echo "================================================"
@@ -71,7 +79,7 @@ REPONSES
 fi
 
 # ── Vérification : les autres utilisateurs doivent atteindre le dossier ─
-if ! sudo -u eve test -x "$PWD/ctf"; then
+if ! sudo -u eve bash -c 'test -x "$0"' "$PWD/ctf"; then
     echo ""
     echo "ATTENTION : alice, bob et eve ne peuvent pas entrer dans $PWD."
     echo "Un des dossiers parents leur est fermé (essayez : namei -l $PWD)."

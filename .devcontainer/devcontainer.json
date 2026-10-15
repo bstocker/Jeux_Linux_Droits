@@ -1,5 +1,5 @@
 {
   "name": "Jeu des droits Linux",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "build": { "dockerfile": "Dockerfile" },
   "postCreateCommand": "bash setup.sh"
 }

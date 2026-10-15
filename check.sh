@@ -1,126 +1,149 @@
 #!/bin/bash
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-BOLD='\033[1m'
+# Vérifie chaque étape en testant ce qui se passe vraiment :
+# « bob peut-il lire ce fichier ? » plutôt que de décoder les chiffres des droits.
+cd "$(dirname "$0")"
+
+VERT='\033[0;32m'
+ROUGE='\033[0;31m'
+JAUNE='\033[1;33m'
+BLEU='\033[0;34m'
 NC='\033[0m'
 
 SCORE=0
+BONUS=0
 
-pass() { echo -e "  ${GREEN}✓ VALIDÉ${NC} – $1"; SCORE=$((SCORE + $2)); }
-fail() { echo -e "  ${RED}✗ ÉCHEC${NC}  – $1"; }
-hint() { echo -e "  ${BLUE}💡${NC} $1"; }
-info() { echo -e "  ${BLUE}ℹ${NC}  $1"; }
+titre()  { echo -e "${JAUNE}$1${NC}"; }
+reussi() { echo -e "  ${VERT}✓ Réussi${NC} – $1"; SCORE=$((SCORE + $2)); }
+rate()   { echo -e "  ${ROUGE}✗ Pas encore${NC} – $1"; }
+indice() { echo -e "  ${BLEU}💡 Indice :${NC} $1"; }
+
+# peut <utilisateur> <lire|ecrire|entrer> <chemin>
+# Exemple : peut bob lire ctf/etape3/info.txt
+peut() {
+    case "$2" in
+        lire)   sudo -u "$1" test -r "$3" ;;
+        ecrire) sudo -u "$1" test -w "$3" ;;
+        entrer) sudo -u "$1" test -x "$3" ;;
+    esac
+}
+
+# Créer un fichier dans un dossier demande d'y écrire ET d'y entrer.
+peut_creer_dans() { peut "$1" ecrire "$2" && peut "$1" entrer "$2"; }
+
+# Affiche « oui » si la commande réussit, « non » sinon.
+oui_non() { if "$@"; then echo "oui"; else echo "non"; fi; }
+
+# Lit la réponse Qn dans reponses.txt (sans espaces, en minuscules).
+reponse() { grep "^$1=" reponses.txt 2>/dev/null | cut -d= -f2 | tr -d ' ' | tr 'A-Z' 'a-z'; }
+
+if [ ! -d ctf ]; then
+    echo "Le dossier ctf/ n'existe pas : lancez d'abord  bash setup.sh"
+    exit 1
+fi
 
 echo "================================================"
-echo "   CTF Linux Droits – Validation"
+echo "   Jeu des droits Linux – Vérification"
 echo "================================================"
 echo ""
 
-# ── Challenge 1 – Accès interdit ─────────────────────
-echo -e "${YELLOW}${BOLD}Challenge 1 – Accès interdit (10 pts)${NC}"
-if sudo -u bob cat ctf/secret/flag.txt 2>/dev/null | grep -q "FLAG{"; then
-    FLAG=$(sudo -u bob cat ctf/secret/flag.txt)
-    pass "bob peut lire ctf/secret/flag.txt → $FLAG" 10
+# ── Étape 1 – Lire ls -l ─────────────────────────────
+titre "Étape 1 – Lire ls -l (10 pts)"
+# Les bonnes réponses sont calculées à partir des vrais fichiers.
+ATTENDU_Q1=$(stat -c "%U" ctf/etape1/rapport.txt)
+ATTENDU_Q2=$(oui_non peut bob lire ctf/etape1/rapport.txt)
+ATTENDU_Q3=$(oui_non peut bob ecrire ctf/etape1/rapport.txt)
+ATTENDU_Q4=$(oui_non peut alice lire ctf/etape1/notes.txt)
+ATTENDU_Q5=$(stat -c "%a" ctf/etape1/affiche.txt)
+
+BONNES=0
+for q in Q1 Q2 Q3 Q4 Q5; do
+    attendu_var="ATTENDU_$q"
+    if [ "$(reponse $q)" = "${!attendu_var}" ]; then
+        BONNES=$((BONNES + 1))
+    else
+        rate "$q incorrecte ou pas encore remplie"
+    fi
+done
+if [ "$BONNES" -eq 5 ]; then
+    reussi "5 bonnes réponses sur 5" 10
 else
-    fail "bob ne peut pas lire ctf/secret/flag.txt"
-    hint "Commandes utiles : id, ls -ld ctf/secret/, ls -l ctf/secret/flag.txt"
-    hint "Êtes-vous bien dans le groupe ctfgroup ? Vérifiez avec : groups bob"
+    indice "$BONNES/5 bonnes réponses. Relisez le rappel en haut du README."
 fi
 echo ""
 
-# ── Challenge 2 – Mauvaise config ────────────────────
-echo -e "${YELLOW}${BOLD}Challenge 2 – Mauvaise config (20 pts)${NC}"
-FILE_MODE=$(stat -c "%a" ctf/public/info.txt 2>/dev/null || echo "000")
-OTHERS_BITS=$(( 8#$FILE_MODE & 7 ))
-if [ $(( OTHERS_BITS & 2 )) -eq 0 ]; then
-    pass "info.txt n'est plus modifiable par others (mode: $FILE_MODE)" 20
+# ── Étape 2 – Rendre un script exécutable ────────────
+titre "Étape 2 – Rendre un script exécutable (10 pts)"
+if [ -x ctf/etape2/bonjour.sh ]; then
+    reussi "bonjour.sh est exécutable" 10
 else
-    fail "info.txt est encore world-writable (mode: $FILE_MODE)"
-    hint "Solution : sudo chmod o-w ctf/public/info.txt"
+    rate "bonjour.sh n'est pas exécutable"
+    indice "Quelle lettre veut dire « exécuter » ? Et qui doit avoir ce droit ?"
 fi
 echo ""
 
-# ── Challenge 3 – Escalade groupe ────────────────────
-echo -e "${YELLOW}${BOLD}Challenge 3 – Escalade groupe (30 pts)${NC}"
-SHARED_MODE=$(stat -c "%a" ctf/shared/ 2>/dev/null || echo "000")
-SHARED_GRP=$(stat -c "%G" ctf/shared/ 2>/dev/null || echo "?")
-HAS_SETGID=$(( (8#$SHARED_MODE & 02000) != 0 ))
-CH3_OK=1
-
-if [ "$SHARED_GRP" != "ctfgroup" ]; then
-    fail "shared/ n'appartient pas à ctfgroup (actuel: $SHARED_GRP)"
-    hint "Solution : sudo chown :ctfgroup ctf/shared/"
-    CH3_OK=0
-fi
-if [ "$HAS_SETGID" -eq 0 ]; then
-    fail "shared/ n'a pas le setgid bit (mode: $SHARED_MODE)"
-    hint "Solution : sudo chmod g+s ctf/shared/"
-    CH3_OK=0
-fi
-if [ "$CH3_OK" -eq 1 ]; then
-    pass "shared/ a le setgid bit et appartient à ctfgroup" 30
-fi
-echo ""
-
-# ── Challenge 4 – Sticky trap ────────────────────────
-echo -e "${YELLOW}${BOLD}Challenge 4 – Sticky trap (40 pts)${NC}"
-SHARED_MODE=$(stat -c "%a" ctf/shared/ 2>/dev/null || echo "000")
-HAS_STICKY=$(( (8#$SHARED_MODE & 01000) != 0 ))
-if [ "$HAS_STICKY" -ne 0 ]; then
-    pass "shared/ a le sticky bit (mode: $SHARED_MODE)" 40
+# ── Étape 3 – Protéger un fichier ────────────────────
+titre "Étape 3 – Protéger un fichier (10 pts)"
+if ! peut bob lire ctf/etape3/info.txt; then
+    rate "bob ne peut plus lire info.txt : vous avez retiré trop de droits"
+    indice "Il faut seulement empêcher d'écrire, pas de lire."
+elif peut bob ecrire ctf/etape3/info.txt; then
+    rate "bob peut encore modifier info.txt"
+    indice "Regardez les 3 derniers caractères de ls -l : ce sont les droits des « autres »."
 else
-    fail "shared/ n'a pas le sticky bit (mode: $SHARED_MODE)"
-    hint "Solution : sudo chmod +t ctf/shared/"
+    reussi "bob peut lire info.txt mais plus le modifier" 10
 fi
 echo ""
 
-# ── Challenge 5 – SUID fail ──────────────────────────
-echo -e "${YELLOW}${BOLD}Challenge 5 – SUID fail (50 pts)${NC}"
-echo -e "  ${BLUE}Challenge conceptuel + bonus${NC}"
-RUN_MODE=$(stat -c "%a" ctf/bin/run.sh 2>/dev/null || echo "?")
-info "run.sh a le SUID positionné (mode: $RUN_MODE)"
-info "Mais le noyau Linux ignore le SUID sur les scripts shell."
-info "Seuls les binaires ELF compilés peuvent utiliser le SUID."
-echo ""
-
-if [ -f ctf/bin/run_suid ] && [ $(( (8#$(stat -c "%a" ctf/bin/run_suid 2>/dev/null || echo 0)) & 04000 )) -ne 0 ]; then
-    pass "Bonus : binaire SUID compilé trouvé dans ctf/bin/run_suid" 50
+# ── Étape 4 – Ouvrir un dossier à son équipe ─────────
+titre "Étape 4 – Ouvrir un dossier à son équipe (10 pts)"
+if ! peut bob lire ctf/etape4/secret/flag.txt; then
+    rate "bob ne peut pas lire ctf/etape4/secret/flag.txt"
+    indice "Le fichier est en rw-r--r--… le problème vient-il vraiment du fichier ?"
+    indice "Essayez : namei -l ctf/etape4/secret/flag.txt"
+elif peut eve lire ctf/etape4/secret/flag.txt; then
+    rate "bob peut lire le flag… mais eve aussi ! Le secret est ouvert à tout le monde"
+    indice "Ouvrez le dossier au groupe seulement, pas aux « autres »."
 else
-    info "Bonus : compilez un binaire C avec SUID pour gagner les 50 pts"
-    hint "Exemple : gcc -o ctf/bin/run_suid ctf/bin/run_suid.c"
-    hint "         sudo chown root ctf/bin/run_suid && sudo chmod 4755 ctf/bin/run_suid"
+    reussi "bob lit le flag, eve reste dehors" 10
 fi
 echo ""
 
-# ── Challenge 6 – Debug permissions ──────────────────
-echo -e "${YELLOW}${BOLD}Challenge 6 – Debug permissions (50 pts)${NC}"
-echo -e "  ${BLUE}Challenge conceptuel${NC}"
-SECRET_MODE=$(stat -c "%a" ctf/secret/ 2>/dev/null || echo "?")
-FLAG_MODE=$(stat -c "%a" ctf/secret/flag.txt 2>/dev/null || echo "?")
-info "Permissions actuelles : secret/=$(${SECRET_MODE}) flag.txt=$FLAG_MODE"
-info "Règle fondamentale : les permissions d'un fichier ne s'appliquent"
-info "que si chaque répertoire parent est traversable (bit x)."
-info "Un chmod 777 sur flag.txt ne sert à rien si secret/ est en 700."
-hint "Outil : namei -l ctf/secret/flag.txt"
-
-SECRET_OTHERS=$(( 8#$SECRET_MODE & 7 ))
-if [ $(( SECRET_OTHERS & 1 )) -eq 0 ] && [ "$FLAG_MODE" = "777" ]; then
-    pass "Bonne configuration démontrée : dir restrictive + fichier 777 = accès bloqué" 50
+# ── Étape 5 – Un dossier de projet commun ────────────
+titre "Étape 5 – Un dossier de projet commun (10 pts)"
+PROJET=ctf/etape5/projet
+if [ "$(stat -c "%G" $PROJET)" != "ctfgroup" ]; then
+    rate "le groupe de projet/ n'est pas ctfgroup (actuel : $(stat -c "%G" $PROJET))"
+    indice "Une commande permet de changer le groupe d'un fichier : chgrp."
+elif ! peut_creer_dans alice $PROJET || ! peut_creer_dans bob $PROJET; then
+    rate "alice et bob ne peuvent pas encore créer de fichiers dans projet/"
+    indice "Le groupe est bon. Quel droit manque-t-il au groupe ?"
+elif peut_creer_dans eve $PROJET; then
+    rate "eve peut aussi créer des fichiers dans projet/ : c'est trop ouvert"
 else
-    hint "Pour démontrer : sudo chmod 700 ctf/secret/ && sudo chmod 777 ctf/secret/flag.txt"
-    hint "Puis vérifiez que bob ne peut toujours pas lire."
+    reussi "alice et bob peuvent travailler dans projet/, eve non" 10
+fi
+echo ""
+
+# ── Bonus ─────────────────────────────────────────────
+titre "Bonus (5 pts chacun)"
+if [ -g $PROJET ]; then
+    reussi "setgid activé sur projet/" 0; BONUS=$((BONUS + 5))
+else
+    rate "setgid pas encore activé sur projet/"
+    indice "Utilisez sudo pour chaque chmod du bonus (sudo chmod g+s ...)."
+fi
+if [ -k $PROJET ]; then
+    reussi "sticky bit activé sur projet/" 0; BONUS=$((BONUS + 5))
+else
+    rate "sticky bit pas encore activé sur projet/"
 fi
 echo ""
 
 # ── Score ─────────────────────────────────────────────
 echo "================================================"
-if [ "$SCORE" -eq 200 ]; then
-    echo -e "   Score : ${GREEN}${BOLD}${SCORE} / 200 pts – Parfait ! 🏆${NC}"
-elif [ "$SCORE" -ge 100 ]; then
-    echo -e "   Score : ${YELLOW}${BOLD}${SCORE} / 200 pts${NC}"
+if [ "$SCORE" -eq 50 ]; then
+    echo -e "   Score : ${VERT}${SCORE} / 50 pts${NC} 🏆   Bonus : +${BONUS} / 10"
 else
-    echo -e "   Score : ${RED}${BOLD}${SCORE} / 200 pts${NC}"
+    echo -e "   Score : ${SCORE} / 50 pts   Bonus : +${BONUS} / 10"
 fi
 echo "================================================"

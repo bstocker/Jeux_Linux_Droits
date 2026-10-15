@@ -1,239 +1,249 @@
-# CTF Linux Droits – Codespaces Edition
+# Jeu des droits Linux
 
-> "Les permissions Linux sont simples… jusqu'à ce qu'elles ne le soient plus."
+> « Les permissions Linux sont simples… jusqu'à ce qu'elles ne le soient plus. »
 
-Bienvenue dans ce mini CTF pédagogique sur les **permissions Linux**.  
-Votre mission : comprendre et exploiter les droits, identifier des misconfigurations, et récupérer des flags.
+Bienvenue dans ce petit jeu sur les **droits des fichiers sous Linux**.
+En 5 étapes, vous allez apprendre à lire les droits, puis à les modifier pour
+protéger ou partager des fichiers.
 
 ---
 
 ## Mise en route
 
-### 1. Lancer le projet dans Codespaces
-
-- Forkez / clonez ce dépôt
-- Cliquez sur **Code** → **Create codespace on main**
-- Le script `./setup.sh` s'exécute automatiquement et configure tout l'environnement
-
-### 2. Vérifier l'environnement
+1. Forkez ce dépôt, puis cliquez sur **Code** → **Create codespace on main**.
+2. Attendez la fin de l'installation : le script `setup.sh` se lance tout seul.
+3. Dans le terminal, vérifiez que tout est prêt :
 
 ```bash
-# Vérifier que les utilisateurs existent
-id alice
-id bob
-
-# Vérifier la structure des dossiers
-ls -lR ctf/
+whoami          # votre utilisateur (vscode)
+id bob          # bob existe et fait partie du groupe ctfgroup
+ls ctf/         # les dossiers des 5 étapes
 ```
 
-### 3. Valider vos réponses
+À tout moment :
 
 ```bash
-bash check.sh
+bash check.sh   # vérifier vos réponses et voir votre score
+bash setup.sh   # tout remettre à zéro si vous êtes bloqué
 ```
 
----
+### Les personnages
 
-## Challenges
+| Utilisateur | Groupe | Rôle |
+|---|---|---|
+| vous (`vscode`) | | l'administrateur, vous avez le droit d'utiliser `sudo` |
+| `alice` | `ctfgroup` | membre de l'équipe |
+| `bob` | `ctfgroup` | membre de l'équipe |
+| `eve` | | une personne extérieure à l'équipe |
 
-| # | Nom | Points |
-|---|-----|--------|
-| 1 | Accès interdit | 10 |
-| 2 | Mauvaise config | 20 |
-| 3 | Escalade groupe | 30 |
-| 4 | Sticky trap | 40 |
-| 5 | SUID fail | 50 |
-| 6 | Debug permissions | 50 |
-| | **Total** | **200** |
-
----
-
-### Challenge 1 – Accès interdit `10 pts`
-
-**Contexte :** Le fichier `ctf/secret/flag.txt` contient un flag. Vous êtes connecté en tant que `bob`.
-
-**Objectif :** Lire le flag.
-
-**Indice :** Regardez attentivement les permissions du répertoire `secret/` et le groupe auquel appartient `bob`.
+Pour lancer une commande **à la place de bob** :
 
 ```bash
-ls -ld ctf/secret/
-ls -l ctf/secret/flag.txt
-id bob
+sudo -u bob cat ctf/etape3/info.txt
 ```
 
 ---
 
-### Challenge 2 – Mauvaise config `20 pts`
+## Rappel : lire les droits
 
-**Contexte :** `ctf/public/info.txt` est modifiable par n'importe qui.
-
-**Objectif :** Corriger les permissions pour que `bob` puisse **lire** le fichier mais **pas l'écrire**.
-
-**Vérification :**
-```bash
-# Avant correction
-sudo -u bob bash -c "echo test >> ctf/public/info.txt"  # doit réussir
-
-# Après correction
-sudo -u bob bash -c "echo test >> ctf/public/info.txt"  # doit échouer
-sudo -u bob cat ctf/public/info.txt                     # doit réussir
 ```
+$ ls -l ctf/etape1/rapport.txt
+-rw-r----- 1 alice ctfgroup 17 oct. 15 10:00 rapport.txt
+│└┬┘└┬┘└┬┘   └─┬─┘ └──┬───┘
+│ │  │  │      │      └── groupe du fichier
+│ │  │  │      └───────── propriétaire du fichier
+│ │  │  └── droits des autres       (---  : rien)
+│ │  └───── droits du groupe        (r--  : lire)
+│ └──────── droits du propriétaire  (rw-  : lire et écrire)
+└────────── type : - fichier, d dossier
+```
+
+| Lettre | Sur un fichier | Sur un dossier |
+|---|---|---|
+| `r` | lire le contenu | lister ce qu'il contient (`ls`) |
+| `w` | modifier le contenu | créer ou supprimer des fichiers dedans |
+| `x` | exécuter (programme, script) | **entrer** dedans (`cd`) et atteindre ses fichiers |
+
+**En chiffres** : `r` = 4, `w` = 2, `x` = 1. On additionne pour chaque catégorie.
+Exemple : `rw-r-----` → 4+2 / 4 / 0 → **640**.
 
 ---
 
-### Challenge 3 – Escalade groupe `30 pts`
+## Étape 1 – Lire ls -l `10 pts`
 
-**Contexte :** Le dossier `ctf/shared/` doit permettre à `alice` et `bob` d'écrire des fichiers en **héritant automatiquement du groupe** `ctfgroup`.
+Regardez les fichiers de l'étape 1 :
 
-**Objectif :** Configurer correctement `ctf/shared/` avec le bon groupe et le **setgid bit**.
-
-**Comportement attendu :**
 ```bash
-sudo -u alice touch ctf/shared/fichier_alice.txt
-stat -c "%G" ctf/shared/fichier_alice.txt  # doit afficher ctfgroup
+ls -l ctf/etape1/
 ```
 
-**Commandes utiles :**
-```bash
-chmod g+s  # activer le setgid bit
-chown :groupe  # changer le groupe propriétaire
-```
+Puis répondez dans le fichier `reponses.txt` (ouvrez-le dans l'éditeur) :
 
----
+| | Question | Exemple de réponse |
+|---|---|---|
+| Q1 | Qui est le propriétaire de `rapport.txt` ? | un nom d'utilisateur |
+| Q2 | bob peut-il **lire** `rapport.txt` ? | `oui` ou `non` |
+| Q3 | bob peut-il **modifier** `rapport.txt` ? | `oui` ou `non` |
+| Q4 | alice peut-elle **lire** `notes.txt` ? | `oui` ou `non` |
+| Q5 | Quels sont les droits de `affiche.txt` en chiffres ? | 3 chiffres, comme `640` |
 
-### Challenge 4 – Sticky trap `40 pts`
-
-**Contexte :** `ctf/shared/` autorise tout le monde à écrire, mais `bob` peut supprimer les fichiers d'`alice`.
-
-**Objectif :** Configurer le **sticky bit** pour que chacun ne puisse supprimer que ses propres fichiers.
-
-**Comportement attendu :**
-```bash
-sudo -u alice touch ctf/shared/alice.txt
-sudo -u bob rm ctf/shared/alice.txt  # doit être refusé
-```
-
-**Commande :**
-```bash
-chmod +t ctf/shared/
-```
-
-> Le sticky bit est reconnaissable au `t` à la fin : `drwxrwxrwt`
-
----
-
-### Challenge 5 – SUID fail `50 pts`
-
-**Contexte :** Le script `ctf/bin/run.sh` est marqué SUID (`chmod 4755`).
-
-**Objectif :** Exécuter le script avec les privilèges de `root`.
-
-**Constat :**
-```bash
-ls -l ctf/bin/run.sh    # affiche -rwsr-xr-x
-./ctf/bin/run.sh        # le script s'exécute mais PAS en tant que root
-```
-
-**Question :** Pourquoi le SUID ne fonctionne-t-il pas sur ce script ?
+Exemple de ligne remplie : `Q1=alice`
 
 <details>
-<summary>Réponse</summary>
+<summary>Indice</summary>
 
-Le noyau Linux **ignore le bit SUID sur les scripts shell** (fichiers texte avec shebang).  
-Cette protection existe depuis les années 90 pour éviter des race conditions dangereuses.  
-Seuls les **binaires ELF compilés** peuvent bénéficier du SUID.
-
-</details>
-
-**Bonus :** Créez un binaire C avec SUID qui affiche le flag.
-
-```c
-// ctf/bin/run_suid.c
-#include <stdio.h>
-#include <unistd.h>
-
-int main() {
-    printf("Effectif UID: %d\n", geteuid());
-    printf("FLAG{su1d_m4st3r}\n");
-    return 0;
-}
-```
-
-```bash
-gcc -o ctf/bin/run_suid ctf/bin/run_suid.c
-sudo chown root ctf/bin/run_suid
-sudo chmod 4755 ctf/bin/run_suid
-./ctf/bin/run_suid  # s'exécute en tant que root
-```
-
----
-
-### Challenge 6 – Debug permissions `50 pts`
-
-**Contexte :** Un administrateur a exécuté la commande suivante pour rendre le flag lisible par tous :
-
-```bash
-sudo chmod 777 ctf/secret/flag.txt
-```
-
-Pourtant, `bob` ne peut **toujours pas** lire le fichier.
-
-**Objectif :** Expliquer pourquoi l'accès est toujours refusé.
-
-**Investigation :**
-```bash
-namei -l ctf/secret/flag.txt
-ls -ld ctf/secret/
-ls -l ctf/secret/flag.txt
-```
-
-<details>
-<summary>Réponse</summary>
-
-Les permissions d'un fichier ne s'appliquent que si **chaque répertoire parent est traversable** (bit `x`).  
-Si `ctf/secret/` est en mode `700` (propriétaire root), `bob` ne peut pas y entrer,  
-quel que soit le mode du fichier à l'intérieur.
-
-**Règle :** Pour accéder à `/a/b/c`, il faut le bit `x` sur `/a/`, `/a/b/`, puis les droits sur `c`.
+Pour savoir à quelle catégorie bob appartient, demandez-vous dans l'ordre :
+est-il le propriétaire ? Sinon, est-il dans le groupe du fichier (`id bob`) ?
+Sinon, il fait partie des « autres ».
 
 </details>
 
 ---
 
-## Outils de référence
+## Étape 2 – Rendre un script exécutable `10 pts`
+
+Le script `ctf/etape2/bonjour.sh` refuse de se lancer :
 
 ```bash
-ls -l          # afficher les permissions d'un fichier
-ls -ld         # afficher les permissions d'un répertoire
-stat -c "%a"   # afficher les permissions en octal
-id             # afficher l'utilisateur et ses groupes
-groups <user>  # groupes d'un utilisateur
-namei -l       # décomposer les permissions sur un chemin complet
-chmod          # modifier les permissions
-chown          # modifier le propriétaire
-chgrp          # modifier le groupe
+./ctf/etape2/bonjour.sh
+# bash: ./ctf/etape2/bonjour.sh: Permission denied
 ```
 
-### Rappel des notations
+**Objectif :** rendre le script exécutable pour vous, puis le lancer pour obtenir le flag.
 
-| Notation | Description |
-|----------|-------------|
-| `rwxr-xr-x` | owner=rwx, group=r-x, others=r-x |
-| `chmod 755` | équivalent octal |
-| `chmod u+x` | ajouter x au propriétaire |
-| `chmod g+s` | setgid bit |
-| `chmod +t`  | sticky bit |
-| `chmod 4755` | SUID + 755 |
+**Commande utile :** `chmod` (voir `man chmod`).
+
+<details>
+<summary>Indice</summary>
+
+`chmod` accepte une forme lisible : **qui** (`u` propriétaire, `g` groupe, `o` autres),
+puis `+` ou `-`, puis **quel droit** (`r`, `w`, `x`).
+
+</details>
 
 ---
 
-## Validation
+## Étape 3 – Protéger un fichier `10 pts`
+
+Le fichier `ctf/etape3/info.txt` peut être modifié par **n'importe qui**.
+Essayez :
 
 ```bash
-bash check.sh
+sudo -u bob bash -c "echo 'bob était là' >> ctf/etape3/info.txt"
+cat ctf/etape3/info.txt
 ```
 
-Un challenge est validé si :
-- le flag est récupéré, **ou**
-- la configuration demandée est correcte
+**Objectif :** que bob puisse toujours **lire** le fichier, mais plus le **modifier**.
+
+<details>
+<summary>Indice</summary>
+
+bob n'est ni le propriétaire, ni dans le groupe du fichier : il fait partie des « autres ».
+Retirez seulement le droit qui pose problème.
+
+</details>
+
+---
+
+## Étape 4 – Ouvrir un dossier à son équipe `10 pts`
+
+Le fichier `ctf/etape4/secret/flag.txt` est en `rw-r--r--` : tout le monde devrait pouvoir le lire.
+Et pourtant :
+
+```bash
+sudo -u bob cat ctf/etape4/secret/flag.txt
+# cat: ctf/etape4/secret/flag.txt: Permission denied
+```
+
+**Objectif :** que bob (membre de `ctfgroup`) puisse lire le flag,
+mais **pas eve** (qui n'est pas dans le groupe).
+
+**Commande utile :** `namei -l ctf/etape4/secret/flag.txt` affiche les droits de chaque dossier du chemin.
+
+<details>
+<summary>Indice</summary>
+
+Pour atteindre un fichier, il faut pouvoir **entrer** dans chaque dossier du chemin.
+Quel droit permet d'entrer dans un dossier ? Et à qui faut-il le donner ?
+
+</details>
+
+---
+
+## Étape 5 – Un dossier de projet commun `10 pts`
+
+alice et bob veulent travailler ensemble dans `ctf/etape5/projet/`.
+
+**Objectif :** qu'alice et bob puissent tous les deux **créer des fichiers** dans `projet/`,
+mais **pas eve**.
+
+**Commandes utiles :** `chgrp` (changer le groupe), `chmod`.
+Comme vous n'êtes pas membre de `ctfgroup`, `chgrp` doit être lancé avec `sudo`.
+
+Testez :
+
+```bash
+sudo -u alice touch ctf/etape5/projet/alice.txt   # doit marcher
+sudo -u eve touch ctf/etape5/projet/eve.txt       # doit être refusé
+```
+
+<details>
+<summary>Indice</summary>
+
+Deux choses à faire : donner le dossier au bon groupe, puis donner à ce groupe le droit d'écrire.
+
+</details>
+
+---
+
+## Bonus `5 pts chacun`
+
+Pour aller plus loin, toujours sur `ctf/etape5/projet/` :
+
+> ⚠️ Lancez **toutes** les commandes `chmod` du bonus avec `sudo`. Vous n'êtes pas membre de
+> `ctfgroup` : sans `sudo`, Linux retire le setgid en silence à chaque `chmod`.
+
+**Bonus A – setgid.** Créez un fichier en tant qu'alice et regardez son groupe avec `ls -l`.
+On voudrait que les nouveaux fichiers appartiennent automatiquement au groupe `ctfgroup`.
+Cherchez le **setgid** dans `man chmod` (`chmod g+s`).
+
+**Bonus B – sticky bit.** En l'état, bob peut **supprimer** les fichiers d'alice :
+
+```bash
+sudo -u alice touch ctf/etape5/projet/a_garder.txt
+sudo -u bob rm ctf/etape5/projet/a_garder.txt
+```
+
+Activez le **sticky bit** (`chmod +t`) pour que chacun ne puisse supprimer que ses propres fichiers.
+C'est ce que fait le dossier `/tmp` : regardez `ls -ld /tmp`.
+
+**Question de réflexion (sans points) – le SUID.** Le bit SUID (`chmod u+s`) permet à un programme
+de s'exécuter avec les droits de son propriétaire, quel que soit l'utilisateur qui le lance.
+Regardez `ls -l /usr/bin/passwd` : pourquoi cette commande en a-t-elle besoin ?
+
+<details>
+<summary>Réponse</summary>
+
+`passwd` doit modifier `/etc/shadow`, qui n'est modifiable que par root.
+Grâce au SUID, n'importe quel utilisateur peut changer son propre mot de passe :
+le programme s'exécute alors avec les droits de root.
+C'est puissant, donc dangereux. Par sécurité, Linux ignore d'ailleurs le SUID sur les scripts shell.
+
+</details>
+
+---
+
+## Aide-mémoire
+
+```bash
+ls -l fichier          # droits d'un fichier
+ls -ld dossier         # droits d'un dossier (et non de son contenu)
+stat -c "%a" fichier   # droits en chiffres
+id bob                 # utilisateur et groupes de bob
+namei -l chemin        # droits de chaque dossier d'un chemin
+chmod u+x fichier      # ajouter un droit (u, g, o / r, w, x)
+chmod o-w fichier      # retirer un droit
+chmod 640 fichier      # fixer les droits en chiffres
+chgrp groupe fichier   # changer le groupe
+sudo -u bob commande   # lancer une commande en tant que bob
+```

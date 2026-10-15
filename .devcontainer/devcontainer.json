@@ -1,5 +1,5 @@
 {
-  "name": "Linux CTF",
+  "name": "Jeu des droits Linux",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-  "postCreateCommand": "chmod +x setup.sh check.sh && bash setup.sh"
+  "postCreateCommand": "bash setup.sh"
 }

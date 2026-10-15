@@ -1,75 +1,89 @@
 #!/bin/bash
+# Prépare le jeu : crée les utilisateurs et le dossier ctf/.
+# Relancer ce script remet le jeu à zéro (vos réponses dans reponses.txt sont conservées).
 set -e
+cd "$(dirname "$0")"
 
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-NC='\033[0m'
-
-log() { echo -e "${BLUE}[setup]${NC} $1"; }
-ok()  { echo -e "${GREEN}[ok]${NC}    $1"; }
+MOI=$(id -un)          # votre utilisateur (vscode dans Codespaces)
 
 echo "================================================"
-echo "   CTF Linux Droits - Initialisation"
+echo "   Jeu des droits Linux – Installation"
 echo "================================================"
-echo ""
 
-# Groupe et utilisateurs
-log "Création du groupe ctfgroup et des utilisateurs alice/bob..."
-sudo groupadd ctfgroup 2>/dev/null || true
-sudo useradd -m -s /bin/bash -G ctfgroup alice 2>/dev/null || true
-sudo useradd -m -s /bin/bash -G ctfgroup bob   2>/dev/null || true
-ok "Utilisateurs créés (groupe: ctfgroup)"
+# ── Utilisateurs ─────────────────────────────────────
+# alice et bob font partie de l'équipe « ctfgroup », eve n'en fait pas partie.
+echo "Création des utilisateurs alice, bob et eve..."
+sudo groupadd -f ctfgroup
+for utilisateur in alice bob eve; do
+    id "$utilisateur" &>/dev/null || sudo useradd -m -s /bin/bash "$utilisateur"
+done
+sudo usermod -aG ctfgroup alice
+sudo usermod -aG ctfgroup bob
 
-# Structure
-log "Création des répertoires ctf/..."
-mkdir -p ctf/{public,secret,shared,bin}
+# ── Dossier ctf/ tout neuf ───────────────────────────
+sudo rm -rf ctf
+mkdir -p ctf/etape1 ctf/etape2 ctf/etape3 ctf/etape4/secret ctf/etape5/projet
+chmod 755 ctf ctf/etape1 ctf/etape2 ctf/etape3 ctf/etape4 ctf/etape5
 
-# ── Challenge 1 & 6 ──────────────────────────────────
-# secret/ appartient à root:ctfgroup avec permissions 750
-# → bob (membre de ctfgroup) peut lire → MISCONFIGURATION à découvrir (ch.1)
-# → après correction en 700, chmod 777 sur le fichier ne suffit pas (ch.6)
-log "Challenge 1 – ctf/secret/"
-echo "FLAG{gr0up_l34k_c0nf1g}" | sudo tee ctf/secret/flag.txt > /dev/null
-sudo chown root:ctfgroup ctf/secret/flag.txt
-sudo chmod 640 ctf/secret/flag.txt
-sudo chown root:ctfgroup ctf/secret/
-sudo chmod 750 ctf/secret/
+# ── Étape 1 : lire ls -l ─────────────────────────────
+echo "Rapport d'alice." | sudo tee ctf/etape1/rapport.txt > /dev/null
+sudo chown alice:ctfgroup ctf/etape1/rapport.txt
+sudo chmod 640 ctf/etape1/rapport.txt
 
-# ── Challenge 2 ──────────────────────────────────────
-# public/info.txt est world-writable → MISCONFIGURATION à corriger
-log "Challenge 2 – ctf/public/"
-echo "Bienvenue sur le serveur CTF." | sudo tee ctf/public/info.txt > /dev/null
-sudo chown root:root ctf/public/info.txt
-sudo chmod 666 ctf/public/info.txt
-sudo chown root:root ctf/public/
-sudo chmod 755 ctf/public/
+echo "Notes personnelles de bob." | sudo tee ctf/etape1/notes.txt > /dev/null
+sudo chown bob:bob ctf/etape1/notes.txt
+sudo chmod 600 ctf/etape1/notes.txt
 
-# ── Challenge 3 & 4 ──────────────────────────────────
-# shared/ sans setgid ni sticky bit → à configurer
-log "Challenge 3/4 – ctf/shared/"
-sudo chown root:ctfgroup ctf/shared/
-sudo chmod 775 ctf/shared/
+echo "Affiche publique." | sudo tee ctf/etape1/affiche.txt > /dev/null
+sudo chown root:root ctf/etape1/affiche.txt
+sudo chmod 644 ctf/etape1/affiche.txt
 
-# ── Challenge 5 ──────────────────────────────────────
-# run.sh avec SUID positionné sur un script shell → piège
-log "Challenge 5 – ctf/bin/"
-sudo tee ctf/bin/run.sh > /dev/null << 'SCRIPT'
+# ── Étape 2 : un script qui ne s'exécute pas ─────────
+cat > ctf/etape2/bonjour.sh << 'SCRIPT'
 #!/bin/bash
-echo "FLAG{su1d_m4st3r}"
+echo "Bravo, le script s'exécute ! FLAG{chm0d_u+x}"
 SCRIPT
-sudo chown root:root ctf/bin/run.sh
-sudo chmod 4755 ctf/bin/run.sh
-sudo chown root:root ctf/bin/
-sudo chmod 755 ctf/bin/
+chmod 644 ctf/etape2/bonjour.sh
+
+# ── Étape 3 : un fichier modifiable par tout le monde ─
+echo "Bienvenue sur le serveur." > ctf/etape3/info.txt
+chmod 666 ctf/etape3/info.txt
+
+# ── Étape 4 : un dossier secret fermé ────────────────
+echo "FLAG{tr4v3rs33_d3_d0ss13r}" > ctf/etape4/secret/flag.txt
+chmod 644 ctf/etape4/secret/flag.txt
+sudo chgrp ctfgroup ctf/etape4/secret ctf/etape4/secret/flag.txt
+chmod 700 ctf/etape4/secret
+
+# ── Étape 5 : un dossier de projet commun ────────────
+chmod 755 ctf/etape5/projet
+
+# ── Fichier de réponses (créé une seule fois) ────────
+if [ ! -f reponses.txt ]; then
+    cat > reponses.txt << 'REPONSES'
+# Étape 1 – Remplacez chaque ... par votre réponse, puis lancez : bash check.sh
+Q1=...
+Q2=...
+Q3=...
+Q4=...
+Q5=...
+REPONSES
+fi
+
+# ── Vérification : les autres utilisateurs doivent atteindre le dossier ─
+if ! sudo -u eve test -x "$PWD/ctf"; then
+    echo ""
+    echo "ATTENTION : alice, bob et eve ne peuvent pas entrer dans $PWD."
+    echo "Un des dossiers parents leur est fermé (essayez : namei -l $PWD)."
+    echo "Placez le projet ailleurs (par exemple dans /tmp) ou lancez-le dans Codespaces."
+    exit 1
+fi
 
 echo ""
-ok "Environnement CTF prêt !"
-echo ""
-echo "  Utilisateurs : alice, bob  (groupe: ctfgroup)"
-echo "  ctf/secret/  → mode 750, root:ctfgroup     (ch.1 & ch.6)"
-echo "  ctf/public/  → info.txt mode 666           (ch.2)"
-echo "  ctf/shared/  → mode 775, pas setgid/sticky (ch.3 & ch.4)"
-echo "  ctf/bin/     → run.sh SUID shell            (ch.5)"
-echo ""
-echo "  Pour valider vos réponses : bash check.sh"
+echo "Jeu prêt !"
+echo "  Vous êtes : $MOI"
+echo "  Autres utilisateurs : alice, bob (groupe ctfgroup) et eve (hors groupe)"
+echo "  Les exercices sont dans le README, vos fichiers dans ctf/"
+echo "  Pour vérifier vos réponses : bash check.sh"
+echo "  Pour tout recommencer     : bash setup.sh"
 echo "================================================"
